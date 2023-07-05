@@ -5,17 +5,15 @@ use crate::{
 // use embassy_time::{Duration};
 use embedded_io::asynch::Write;
 
-use fugit::{self, Duration};
 use fugit::ExtU64;
-use futures::future::{Either, select};
+use fugit::{self, Duration};
+use futures::future::{select, Either};
 use futures::pin_mut;
 
 pub trait AtTimerDriver {
-
     // type Instant;
     // fn now() -> Self::Instant;
     // async fn wait_instant(instant: Self::Instant)
-
 
     fn now(&self) -> fugit::Instant<u64, 1, 1000000>;
     async fn wait_instant(&self, instant: fugit::Instant<u64, 1, 1000000>);
@@ -24,20 +22,22 @@ pub trait AtTimerDriver {
 // timer
 pub struct AtTimer<D> {
     driver: D,
-    delay: Option<fugit::Instant<u64, 1, 1000000>>
+    delay: Option<fugit::Instant<u64, 1, 1000000>>,
 }
 
 impl<D: AtTimerDriver> AtTimer<D> {
     pub fn new(driver: D) -> Self {
         Self {
             driver,
-            delay: None
+            delay: None,
         }
     }
 
     fn start_delay(&mut self, delay_ms: u64) {
         let now = self.driver.now();
-        let t_until = now.checked_add_duration(delay_ms.millis::<1,1000>()).unwrap();
+        let t_until = now
+            .checked_add_duration(delay_ms.millis::<1, 1000>())
+            .unwrap();
         // let delay = now.checked_add_duration(10u64.millis::<1,1000>()).unwrap();
         self.delay.replace(t_until);
         // Save instant at which time the delay may end.
@@ -49,10 +49,6 @@ impl<D: AtTimerDriver> AtTimer<D> {
         }
         // Wait until saved instant has passed
     }
-
-
-
-
 }
 
 pub struct FWClient<'a, W: Write, const INGRESS_BUF_SIZE: usize, D> {
@@ -63,19 +59,19 @@ pub struct FWClient<'a, W: Write, const INGRESS_BUF_SIZE: usize, D> {
     // cooldown_timer: Option<Timer>,
 }
 
-impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> FWClient<'a, W, INGRESS_BUF_SIZE, D> {
+impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver>
+    FWClient<'a, W, INGRESS_BUF_SIZE, D>
+{
     pub fn new(
         writer: W,
         res_channel: &'a ResponseChannel<INGRESS_BUF_SIZE>,
-        timer: AtTimer<D>
-        // config: Config,
+        timer: AtTimer<D>, // config: Config,
     ) -> Self {
         Self {
             writer,
             res_channel,
-            timer
-            // config,
-            // cooldown_timer: None,
+            timer, // config,
+                   // cooldown_timer: None,
         }
     }
 
@@ -108,19 +104,14 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> FWClient<'a,
             let timeout_fut = self.timer.wait_delay();
             pin_mut!(fut, timeout_fut);
             match select(fut, &mut timeout_fut).await {
-                Either::Left((r, _right)) => {
-                    Ok(r)
-                },
-                Either::Right((_timeout, _left)) => {
-                    Err(Error::Timeout)
-                }
+                Either::Left((r, _right)) => Ok(r),
+                Either::Right((_timeout, _left)) => Err(Error::Timeout),
             }
         };
 
         self.start_cooldown_timer();
         response
     }
-
 
     async fn send_inner(&mut self, cmd: &[u8]) -> Result<(), Error> {
         if cmd.len() < 50 {
@@ -137,7 +128,7 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> FWClient<'a,
     fn start_cooldown_timer(&mut self) {
         // todo use config
         self.timer.start_delay(10);
-    //     self.cooldown_timer = Some(Timer::after(self.config.cmd_cooldown));
+        //     self.cooldown_timer = Some(Timer::after(self.config.cmd_cooldown));
     }
 
     async fn wait_cooldown_timer(&mut self) {
@@ -145,7 +136,9 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> FWClient<'a,
     }
 }
 
-impl<W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> AtatClient for FWClient<'_, W, INGRESS_BUF_SIZE, D> {
+impl<W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver> AtatClient
+    for FWClient<'_, W, INGRESS_BUF_SIZE, D>
+{
     async fn send<Cmd: AtatCmd<LEN>, const LEN: usize>(
         &mut self,
         cmd: &Cmd,
