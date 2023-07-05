@@ -12,20 +12,17 @@ use futures::pin_mut;
 
 pub trait AtTimerDriver {
     // type Instant;
-    // fn now() -> Self::Instant;
-    // async fn wait_instant(instant: Self::Instant)
-
     fn now(&self) -> fugit::Instant<u64, 1, 1000000>;
     async fn wait_instant(&self, instant: fugit::Instant<u64, 1, 1000000>);
 }
 
 // timer
-pub struct AtTimer<D> {
+pub struct Timer<D> {
     driver: D,
     delay: Option<fugit::Instant<u64, 1, 1000000>>,
 }
 
-impl<D: AtTimerDriver> AtTimer<D> {
+impl<D: AtTimerDriver> Timer<D> {
     pub fn new(driver: D) -> Self {
         Self {
             driver,
@@ -54,7 +51,7 @@ impl<D: AtTimerDriver> AtTimer<D> {
 pub struct FWClient<'a, W: Write, const INGRESS_BUF_SIZE: usize, D> {
     writer: W,
     res_channel: &'a ResponseChannel<INGRESS_BUF_SIZE>,
-    timer: AtTimer<D>,
+    timer: Timer<D>,
     // config: Config,
     // cooldown_timer: Option<Timer>,
 }
@@ -65,7 +62,7 @@ impl<'a, W: Write, const INGRESS_BUF_SIZE: usize, D: AtTimerDriver>
     pub fn new(
         writer: W,
         res_channel: &'a ResponseChannel<INGRESS_BUF_SIZE>,
-        timer: AtTimer<D>, // config: Config,
+        timer: Timer<D>, // config: Config,
     ) -> Self {
         Self {
             writer,

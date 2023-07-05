@@ -2,7 +2,7 @@ mod client;
 mod myclient;
 
 pub use client::Client;
-pub use myclient::{AtTimer, AtTimerDriver, FWClient};
+pub use myclient::{Timer, AtTimerDriver, FWClient};
 
 use crate::{AtatCmd, Error};
 
