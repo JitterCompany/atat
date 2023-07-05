@@ -32,6 +32,7 @@ nom = { version = "^7.1", default-features = false }
 
 log = { version = "^0.4", default-features = false, optional = true }
 defmt = { version = "^0.3", optional = true }
+fugit = "0.3"
 
 [dev-dependencies]
 embassy-time = { version = "0.1.0", features = ["std", "generic-queue"] }
