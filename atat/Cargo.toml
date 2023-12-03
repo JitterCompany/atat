@@ -40,7 +40,7 @@ critical-section = { version = "1.1", features = ["std"] }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [features]
-default = ["derive", "bytes"]
+default = ["derive", "bytes", "log"]
 defmt = ["dep:defmt", "embedded-io-async/defmt-03", "heapless/defmt-03"]
 derive = ["atat_derive", "serde_at"]
 bytes = ["heapless-bytes", "serde_bytes"]

@@ -170,6 +170,10 @@ impl<
                             .map_err(|_| Error::UrcChannelFull)?;
                     } else {
                         error!("Parsing URC FAILED: {:?}", LossyStr(urc_line));
+
+                        if let Err(frame) = self.res_publisher.try_publish(Ok(urc_line).into()) {
+                            // todo ?? self.res_publisher.publish(frame).await;
+                        }
                     }
                     swallowed
                 }
@@ -254,7 +258,11 @@ impl<
                             self.urc_publisher.publish(urc).await;
                         }
                     } else {
-                        error!("Parsing URC FAILED: {:?}", LossyStr(urc_line));
+                        warn!("Parsing URC FAILED: {:?}", LossyStr(urc_line));
+                        // Publish urc_line as a response
+                        if let Err(frame) = self.res_publisher.try_publish(Ok(urc_line).into()) {
+                            self.res_publisher.publish(frame).await;
+                        }
                     }
                     swallowed
                 }

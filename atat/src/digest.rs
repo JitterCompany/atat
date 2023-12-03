@@ -113,14 +113,19 @@ impl<P: Parser> Default for AtDigester<P> {
 
 impl<P: Parser> Digester for AtDigester<P> {
     fn digest<'a>(&mut self, input: &'a [u8]) -> (DigestResult<'a>, usize) {
+        log::debug!("input: {:?}", input);
+
         // 1. Optionally discard space and echo
         let buf = parser::trim_start_ascii_space(input);
+        log::debug!("buf: {:?}", buf);
         let space_bytes = input.len() - buf.len();
         let (buf, space_and_echo_bytes) = match nom::combinator::opt(parser::echo)(buf) {
             Ok((buf, echo)) => (buf, space_bytes + echo.unwrap_or_default().len()),
             Err(nom::Err::Incomplete(_)) => return (DigestResult::None, 0),
             Err(_) => panic!("NOM ERROR - opt(echo)"),
         };
+        log::debug!("space_and_echo_bytes: {:?}", space_and_echo_bytes);
+
 
         // Incomplete. Eat whitespace and echo and do nothing else.
         let incomplete = (DigestResult::None, space_and_echo_bytes);
@@ -128,7 +133,10 @@ impl<P: Parser> Digester for AtDigester<P> {
         // 2. Match for URC's
         match P::parse(buf) {
             Ok((urc, len)) => return (DigestResult::Urc(urc), len),
-            Err(ParseError::Incomplete) => return incomplete,
+            Err(ParseError::Incomplete) => {
+                log::debug!("URC INCOMPLETE");
+                return incomplete;
+            }
             _ => {}
         }
 
@@ -141,15 +149,23 @@ impl<P: Parser> Digester for AtDigester<P> {
                     len + space_and_echo_bytes,
                 )
             }
-            Err(ParseError::Incomplete) => return incomplete,
+            Err(ParseError::Incomplete) => {
+                log::debug!("CUSTOM INCOMPLETE");
+                return incomplete;
+            }
             _ => {}
         }
 
         // Generic success replies
         match parser::success_response(buf) {
             Ok((_, (result, len))) => return (result, len + space_and_echo_bytes),
-            Err(nom::Err::Incomplete(_)) => return incomplete,
-            _ => {}
+            Err(nom::Err::Incomplete(_)) => {
+                log::debug!("RESP INCOMPLETE1");
+                return incomplete;
+            }
+            _ => {
+                log::debug!("RESP INCOMPLETE2");
+            }
         }
 
         // Custom prompts for data replies first, if any
@@ -214,23 +230,49 @@ pub mod parser {
         &'a [u8]: nom::Compare<T> + nom::FindSubstring<T>,
         T: nom::InputLength + Clone + nom::InputTake + nom::InputIter,
     {
+        // move |i| {
+        //     let (i, (le, urc_tag)) = tuple((
+        //         complete::line_ending,
+        //         recognize(alt((
+        //             tuple((tag(token.clone()), tag(":"), take_until_including("\r\n"))),
+        //             tuple((
+        //                 tag(token.clone()),
+        //                 tag("\r\n"),
+        //                 nom::combinator::success((&b""[..], &b""[..])),
+        //             )),
+        //         ))),
+        //     ))(i)?;
+
+        //     Ok((
+        //         i,
+        //         (trim_ascii_whitespace(urc_tag), le.len() + urc_tag.len()),
+        //     ))
+        // }
         move |i| {
-            let (i, (le, urc_tag)) = tuple((
-                complete::line_ending,
+            let (i, (urc_tag)) = tuple((alt((
+                recognize(tuple((
+                    tag(token.clone()),
+                    tag(":"),
+                    take_until_including("\r\n"),
+                ))),
                 recognize(alt((
-                    tuple((tag(token.clone()), tag(":"), take_until_including("\r\n"))),
                     tuple((
+                        complete::line_ending,
+                        tag(token.clone()),
+                        tag(":"),
+                        take_until_including("\r\n"),
+                    )),
+                    tuple((
+                        complete::line_ending,
                         tag(token.clone()),
                         tag("\r\n"),
                         nom::combinator::success((&b""[..], &b""[..])),
                     )),
                 ))),
-            ))(i)?;
 
-            Ok((
-                i,
-                (trim_ascii_whitespace(urc_tag), le.len() + urc_tag.len()),
-            ))
+            )),))(i)?;
+
+            Ok((i, (trim_ascii_whitespace(urc_tag.0), urc_tag.0.len())))
         }
     }
 
@@ -348,7 +390,13 @@ pub mod parser {
             return Ok((buf, &[]));
         }
 
-        recognize(nom::bytes::complete::take_until("\r\n"))(buf)
+        // recognize(nom::bytes::complete::take_until("\r\n"))(buf)
+        recognize(
+            tuple((
+                tag("AT"),
+                nom::bytes::complete::take_until("\r\n")
+            ))
+        )(buf)
     }
 
     fn take_until_including<T, Input, Error: ParseError<Input>>(
@@ -889,6 +937,23 @@ mod test {
         assert_eq!(
             (res, bytes),
             (DigestResult::Urc(b"+UUSORD: 3,16,\"16 bytes of data\""), 36)
+        );
+        buf.rotate_left(bytes);
+        buf.truncate(buf.len() - bytes);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn urc_without_newline_first_digest() {
+        let mut digester = AtDigester::<UrcTestParser>::new();
+        let mut buf = heapless::Vec::<u8, TEST_RX_BUF_LEN>::new();
+
+        buf.extend_from_slice(b"+UUSORD: 3,16,\"16 bytes of data\"\r\n")
+            .unwrap();
+        let (res, bytes) = digester.digest(&buf);
+        assert_eq!(
+            (res, bytes),
+            (DigestResult::Urc(b"+UUSORD: 3,16,\"16 bytes of data\""), 34)
         );
         buf.rotate_left(bytes);
         buf.truncate(buf.len() - bytes);
