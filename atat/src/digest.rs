@@ -347,8 +347,12 @@ pub mod parser {
         if buf.len() < 2 {
             return Ok((buf, &[]));
         }
+        recognize(tuple((
+            tag("AT"),
+            nom::bytes::complete::take_until("\r\n"), // take_until_including("\r\n")
+        )))(buf)
 
-        recognize(nom::bytes::complete::take_until("\r\n"))(buf)
+        // recognize(nom::bytes::complete::take_until("\r\n"))(buf)
     }
 
     fn take_until_including<T, Input, Error: ParseError<Input>>(
